@@ -81,6 +81,8 @@ class MainWindow(QMainWindow):
 
 
     def _setupUi(self):
+        self._setupMenu()
+        self._setupToolBar()
         self._result_image = QLabel(self)
         self._result_image.setScaledContents(True)
 
