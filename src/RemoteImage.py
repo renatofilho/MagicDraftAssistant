@@ -68,7 +68,7 @@ class RemoteImage(QObject):
 
 
     def _onReplyError(self, error):
-        print("Failed to downlod image:", self._current_request.url())
+        print("Failed to downlod image:", self._current_request.url(), error)
         self._current_request = None
 
 

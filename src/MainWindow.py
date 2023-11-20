@@ -1,10 +1,10 @@
 import os
 
 from PySide6.QtWidgets import QMainWindow, QFileDialog, QStyledItemDelegate, QComboBox, QLabel
-from PySide6.QtWidgets import QTabWidget, QTableView, QScrollArea, QAbstractItemView, QWidget, QFormLayout
+from PySide6.QtWidgets import QTabWidget, QTableView, QAbstractItemView, QWidget, QFormLayout
 from PySide6.QtWidgets import QLineEdit, QCheckBox, QProgressBar
 from PySide6.QtCore import QStandardPaths, QFileSystemWatcher, Qt, QSize
-from PySide6.QtCore import QDirIterator, QSettings, QFileInfo
+from PySide6.QtCore import QDirIterator, QSettings, QFileInfo, QEvent
 from PySide6.QtGui import QPixmap, QIcon, QActionGroup, QCursor
 
 from ImageReader import ImageReader
@@ -78,15 +78,15 @@ class MainWindow(QMainWindow):
         act = self._addCollectionAction(toolBar, act_group, "The Lost Caverns of Ixalan.svg", "lci")
 
         self._resultImage = QLabel(self)
+        self._resultImage.setScaledContents(True)
 
         self._tabs = QTabWidget(self)
 
-        scrollArea = QScrollArea(self)
-        scrollArea.setWidget(self._resultImage)
-        self._tabs.addTab(scrollArea, "Source Image")
+        self._tabs.addTab(self._resultImage, "Source Image")
 
         widget = QWidget(self)
         self._resultList = QTableView(widget)
+        self._resultList.installEventFilter(self)
         self._resultList.setSelectionBehavior(QAbstractItemView.SelectRows)
         self._resultList.setItemDelegateForColumn(3, ComboBoxTierEditor(self))
         self._resultList.setItemDelegateForColumn(4, ComboBoxTierEditor(self))
@@ -188,22 +188,28 @@ class MainWindow(QMainWindow):
         self._saveSettings()
         super().closeEvent(event)
 
+    def eventFilter(self, watched, event):
+        ret = super().eventFilter(watched, event)
+        if watched != self._resultList:
+            return ret
 
-    def keyPressEvent(self, event):
-        self._show_card_images = event.key() == Qt.Key_Shift
-        self._resultList.setMouseTracking(self._show_card_images)
+        if event.type() == QEvent.KeyPress and event.key() == Qt.Key_Alt:
+            self._show_card_images = True
+        elif event.type() == QEvent.KeyRelease and event.key() == Qt.Key_Alt:
+            self._show_card_images = False
+        elif event.type() == QEvent.Leave:
+            self._show_card_images = False
+        else:
+            return ret
+
         if self._show_card_images:
             pos = self._resultList.viewport().mapFromGlobal(QCursor.pos())
+            self._resultList.setMouseTracking(True)
             self._onResultListMouseEntered(self._resultList.indexAt(pos))
-        return super().keyPressEvent(event)
-
-
-    def keyReleaseEvent(self, event):
-        if self._show_card_images and event.key() == Qt.Key_Shift:
-            self._show_card_images = False
+        else:
             self._onResultListMouseEntered(None)
-        self._resultList.setMouseTracking(self._show_card_images)
-        return super().keyReleaseEvent(event)
+            self._resultList.setMouseTracking(False)
+        return ret
 
 
     def _saveSettings(self):
@@ -278,7 +284,6 @@ class MainWindow(QMainWindow):
 
         pic = QPixmap(MainWindow.IMG_RESULT_FILENAME)
         self._resultImage.setPixmap(pic)
-        self._resultImage.setMinimumSize(pic.size())
         self._updateFilterByImage(self._use_image_filter.checkState())
 
 
@@ -304,4 +309,4 @@ class MainWindow(QMainWindow):
         if image_url:
             self._card_widget.setUrl(image_url)
             self._card_widget.show()
-            self._card_widget.move(QCursor.pos())
+            self._card_widget.move(QCursor.pos(self._card_widget.screen()))

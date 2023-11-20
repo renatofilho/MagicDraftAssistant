@@ -40,7 +40,7 @@ class BaseCalibration(object):
 # This is calibration is based on a screen size 3840x2160
 class Calibration_3840_2160(BaseCalibration):
     def __init__(self):
-        super().__init__(resolution = QSize(3840, 2160), x = 572, y = 385, w = 270, h = 29, spacing_x = 393, spacing_y = 536, rows = 3, columns = 5)
+        super().__init__(resolution=QSize(3840, 2160), x=572, y=385, w=270, h=29, spacing_x=393, spacing_y=536, rows=3, columns=5)
 
 
 ############################

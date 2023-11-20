@@ -173,6 +173,16 @@ class DBTable(object):
             return None
         return rows
 
+    def select(self, where, args):
+        table_name = self._name
+        rows = []
+        for row in self._db.execute(f"SELECT * FROM {table_name} where {where}", args):
+            rows.append(self.parseRow(row))
+
+        if len(rows) == 0:
+            return None
+        return rows
+
 
     def emptyField(self, fieldName):
         for field in self._fields:
