@@ -1,4 +1,5 @@
 import os
+import tempfile
 
 from PySide6.QtWidgets import QMainWindow, QFileDialog, QStyledItemDelegate, QComboBox, QLabel
 from PySide6.QtWidgets import QTabWidget, QTableView, QAbstractItemView, QWidget, QFormLayout
@@ -15,11 +16,12 @@ from Database import CardDB, SevenTeenLandsCardDB
 
 
 class ComboBoxTierEditor(QStyledItemDelegate):
+    """Custom delegate that uses a combo-box with pre-defined list of tiers values"""
     def __init__(self, parent = None):
         super().__init__(parent)
 
 
-    def createEditor(self, parent, option, index):
+    def createEditor(self, parent, _option, _index):
         combo = QComboBox(parent)
         combo.addItems(["A+", "A", "A-", "B+", "B", "B-", "C+", "C", "C-", "D+", "D", "D-", "F"])
         return combo
@@ -32,17 +34,17 @@ class ComboBoxTierEditor(QStyledItemDelegate):
     def setModelData(self, editor, model, index):
         model.setData(index, editor.currentText(), Qt.EditRole)
 
-    def displayText(self, value, locale):
+    def displayText(self, value, _locale):
         return value
 
 
 class MainWindow(QMainWindow):
-    IMG_RESULT_FILENAME = "/tmp/result.png"
+    """Application main window"""
 
     def __init__(self, database, parent = None):
         super().__init__(parent)
         self._db = database
-        self._sourceImageFilename = ""
+        self._source_image_filename = ""
         self._card_set = None
         self._track_dir = None
         self._show_card_images = False
@@ -50,68 +52,69 @@ class MainWindow(QMainWindow):
         self._dir_watcher = QFileSystemWatcher(self)
         self._dir_watcher.directoryChanged.connect(self.refresh)
 
-        self._imgReader = ImageReader(database, self)
-        self._imgReader.progress.connect(self._onImageReaderProgressChanged)
-        self._imgReader.finished.connect(self._onImageReaderFinished)
+        self._img_reader = ImageReader(database, self)
+        self._img_reader.progress.connect(self._onImageReaderProgressChanged)
+        self._img_reader.finished.connect(self._onImageReaderFinished)
 
-        self._cardsModel = CardsModel(database, self)
+        self._cards_model = CardsModel(database, self)
 
-        self.setupUi()
+        self._setupUi()
         self._loadSettings()
 
 
-    def setupUi(self):
-        fileMenu = self.menuBar().addMenu("&File")
-        fileMenu.addAction("Configure images dir", self._configImageSourceDir)
-        fileMenu.addAction("Download database", self._donwloadDatabase)
-        fileMenu.addAction("Import 17lands info", self._importSeventeenLandsInfo)
+    def _setupMenu(self):
+        file_menu = self.menuBar().addMenu("&File")
+        file_menu.addAction("Configure images dir", self._configImageSourceDir)
+        file_menu.addAction("Download database", self._donwloadDatabase)
+        file_menu.addAction("Import 17lands info", self._importSeventeenLandsInfo)
 
-        toolBar = self.addToolBar("Sets")
-        toolBar.setObjectName("Sets")
-        toolBar.setIconSize(QSize(36, 36))
+
+    def _setupToolBar(self):
+        tool_bar = self.addToolBar("Sets")
+        tool_bar.setObjectName("Sets")
+        tool_bar.setIconSize(QSize(36, 36))
 
         act_group = QActionGroup(self)
         act_group.setExclusionPolicy(QActionGroup.ExclusionPolicy.Exclusive)
-        act = self._addCollectionAction(toolBar, act_group, "Wilds of Eldraine.svg", "woe")
-        act.setChecked(True)
+        self._addCollectionAction(tool_bar, act_group, "Wilds of Eldraine.svg", "woe")
+        self._addCollectionAction(tool_bar, act_group, "The Lost Caverns of Ixalan.svg", "lci")
 
-        act = self._addCollectionAction(toolBar, act_group, "The Lost Caverns of Ixalan.svg", "lci")
 
-        self._resultImage = QLabel(self)
-        self._resultImage.setScaledContents(True)
+    def _setupUi(self):
+        self._result_image = QLabel(self)
+        self._result_image.setScaledContents(True)
 
         self._tabs = QTabWidget(self)
-
-        self._tabs.addTab(self._resultImage, "Source Image")
+        self._tabs.addTab(self._result_image, "Source Image")
 
         widget = QWidget(self)
-        self._resultList = QTableView(widget)
-        self._resultList.installEventFilter(self)
-        self._resultList.setSelectionBehavior(QAbstractItemView.SelectRows)
-        self._resultList.setItemDelegateForColumn(3, ComboBoxTierEditor(self))
-        self._resultList.setItemDelegateForColumn(4, ComboBoxTierEditor(self))
-        self._resultList.setEditTriggers(QAbstractItemView.DoubleClicked)
-        self._resultList.setSortingEnabled(True)
+        self._result_list = QTableView(widget)
+        self._result_list.installEventFilter(self)
+        self._result_list.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self._result_list.setItemDelegateForColumn(3, ComboBoxTierEditor(self))
+        self._result_list.setItemDelegateForColumn(4, ComboBoxTierEditor(self))
+        self._result_list.setEditTriggers(QAbstractItemView.DoubleClicked)
+        self._result_list.setSortingEnabled(True)
 
-        sortModel = CardsModelProxy(self._cardsModel, self)
-        self._resultList.setModel(sortModel)
-        self._resultList.setColumnHidden(0, True)
-        self._resultList.setColumnHidden(2, True)
-        self._resultList.setColumnWidth(1, 400)
-        self._resultList.setMinimumWidth(600)
+        sort_model = CardsModelProxy(self._cards_model, self)
+        self._result_list.setModel(sort_model)
+        self._result_list.setColumnHidden(0, True)
+        self._result_list.setColumnHidden(2, True)
+        self._result_list.setColumnWidth(1, 400)
+        self._result_list.setMinimumWidth(600)
 
-        formLayout = QFormLayout(widget)
+        form_layout = QFormLayout(widget)
 
         self._search_field = QLineEdit(widget)
-        formLayout.addRow("Search:", self._search_field)
+        form_layout.addRow("Search:", self._search_field)
         self._search_field.textChanged.connect(self._updateFilterByText)
 
         self._use_image_filter = QCheckBox(widget)
         self._use_image_filter.setChecked(True)
         self._use_image_filter.stateChanged.connect(self._updateFilterByImage)
-        formLayout.addRow("Use image as filter:", self._use_image_filter)
+        form_layout.addRow("Use image as filter:", self._use_image_filter)
 
-        formLayout.addRow(self._resultList)
+        form_layout.addRow(self._result_list)
 
         self._tabs.addTab(widget, "Results")
         self.setCentralWidget(self._tabs)
@@ -128,7 +131,7 @@ class MainWindow(QMainWindow):
         status_bar.addWidget(QWidget(self), 1.0)
         status_bar.addPermanentWidget(self._progress_bar)
 
-        self._resultList.entered.connect(self._onResultListMouseEntered)
+        self._result_list.entered.connect(self._onResultListMouseEntered)
 
 
     def setTrackDir(self, dirname):
@@ -140,7 +143,6 @@ class MainWindow(QMainWindow):
             self._dir_watcher.removePath(self._track_dir)
 
         self._track_dir = dirname
-        
         if self._track_dir:
             self._dir_watcher.addPath(self._track_dir)
 
@@ -153,10 +155,8 @@ class MainWindow(QMainWindow):
             return
 
         self._card_set = set_name
-        self._cardsModel.setCardSet(self._card_set)
-        self.setWindowTitle("Card set:{}".format(set_name.upper()))
-
-        print("card set set:",set_name)
+        self._cards_model.setCardSet(self._card_set)
+        self.setWindowTitle(f"Card set:{set_name.upper()}")
         self.refresh()
 
 
@@ -166,22 +166,22 @@ class MainWindow(QMainWindow):
             return
 
         it  = QDirIterator(self._track_dir, QDirIterator.NoIteratorFlags)
-        lastModified = None
-        recentFile = None
-        while (it.hasNext()):
+        last_modified = None
+        recent_file = None
+        while it.hasNext():
             info = QFileInfo(it.next())
             if not info.isFile():
                 continue
-            lastUpdate = info.lastModified()
-            if not lastModified or (lastModified < lastUpdate):
-                lastModified = lastUpdate
-                recentFile = info.absoluteFilePath()
+            last_update = info.lastModified()
+            if not last_modified or (last_modified < last_update):
+                last_modified = last_update
+                recent_file = info.absoluteFilePath()
 
-        if not recentFile:
+        if not recent_file:
             return
 
-        self._sourceImageFilename = recentFile
-        self._imgReader.reload(self._card_set, recentFile)
+        self._source_image_filename = recent_file
+        self._img_reader.reload(self._card_set, recent_file)
 
 
     def closeEvent(self, event):
@@ -190,7 +190,7 @@ class MainWindow(QMainWindow):
 
     def eventFilter(self, watched, event):
         ret = super().eventFilter(watched, event)
-        if watched != self._resultList:
+        if watched != self._result_list:
             return ret
 
         if event.type() == QEvent.KeyPress and event.key() == Qt.Key_Alt:
@@ -203,13 +203,14 @@ class MainWindow(QMainWindow):
             return ret
 
         if self._show_card_images:
-            pos = self._resultList.viewport().mapFromGlobal(QCursor.pos())
-            self._resultList.setMouseTracking(True)
-            self._onResultListMouseEntered(self._resultList.indexAt(pos))
+            pos = self._result_list.viewport().mapFromGlobal(QCursor.pos())
+            self._result_list.setMouseTracking(True)
+            self._onResultListMouseEntered(self._result_list.indexAt(pos))
         else:
             self._onResultListMouseEntered(None)
-            self._resultList.setMouseTracking(False)
+            self._result_list.setMouseTracking(False)
         return ret
+
 
 
     def _saveSettings(self):
@@ -218,7 +219,7 @@ class MainWindow(QMainWindow):
         settings.setValue("windowState", self.saveState())
         settings.setValue("trackDir", self._track_dir)
         settings.setValue("collection", self._card_set)
-        settings.setValue("sortColumn", self._resultList.model().sortColumn())
+        settings.setValue("sortColumn", self._result_list.model().sortColumn())
 
 
     def _loadSettings(self):
@@ -232,7 +233,7 @@ class MainWindow(QMainWindow):
     def _donwloadDatabase(self):
         card = CardDB(self._db)
         card.downloadSet(self._card_set)
-        self._cardsModel.reload()
+        self._cards_model.reload()
 
 
     def _importSeventeenLandsInfo(self):
@@ -242,7 +243,7 @@ class MainWindow(QMainWindow):
 
         db = SevenTeenLandsCardDB(self._db)
         db.importFromFile(self._card_set, desired_file)
-        self._cardsModel.reload()
+        self._cards_model.reload()
 
 
     def _configImageSourceDir(self):
@@ -253,18 +254,18 @@ class MainWindow(QMainWindow):
         self.setTrackDir(desired_dir)
 
 
-    def _updateFilterByImage(self, state):
+    def _updateFilterByImage(self, _state):
         if self._use_image_filter.checkState() == Qt.Checked:
-            self._resultList.model().applyIdFilter(self._imgReader.cardsId())
+            self._result_list.model().applyIdFilter(self._img_reader.cardsId())
         else:
-            self._resultList.model().applyIdFilter(None)
+            self._result_list.model().applyIdFilter(None)
 
 
     def _updateFilterByText(self):
-        self._resultList.model().applyStringFilter(self._search_field.text())
+        self._result_list.model().applyStringFilter(self._search_field.text())
 
 
-    def _addCollectionAction(self, toolbar, act_group, img, name):
+    def _addCollectionAction(self, tool_bar, act_group, img, name):
         app_dir = os.path.dirname(os.path.realpath(__file__))
         icon_pixmap = QPixmap(os.path.join(app_dir, "icons", img))
 
@@ -272,7 +273,7 @@ class MainWindow(QMainWindow):
             if checked:
                 self.setCardSet(name)
 
-        act = toolbar.addAction(QIcon(icon_pixmap), name)
+        act = tool_bar.addAction(QIcon(icon_pixmap), name)
         act.setActionGroup(act_group)
         act.setCheckable(True)
         act.toggled.connect(onActionToggled)
@@ -280,10 +281,10 @@ class MainWindow(QMainWindow):
 
 
     def _onImageReaderFinished(self):
-        self._imgReader.writeOutputImage(MainWindow.IMG_RESULT_FILENAME)
+        self._img_reader.writeOutputImage(self._imgResultFilename())
 
-        pic = QPixmap(MainWindow.IMG_RESULT_FILENAME)
-        self._resultImage.setPixmap(pic)
+        pic = QPixmap(self._imgResultFilename())
+        self._result_image.setPixmap(pic)
         self._updateFilterByImage(self._use_image_filter.checkState())
 
 
@@ -304,9 +305,13 @@ class MainWindow(QMainWindow):
             self._card_widget.hide()
             return
 
-        target_index = self._resultList.model().mapToSource(index)
-        image_url = self._cardsModel.cardImage(target_index)
+        target_index = self._result_list.model().mapToSource(index)
+        image_url = self._cards_model.cardImage(target_index)
         if image_url:
             self._card_widget.setUrl(image_url)
             self._card_widget.show()
             self._card_widget.move(QCursor.pos(self._card_widget.screen()))
+
+
+    def _imgResultFilename(self):
+        return os.path.join(tempfile.gettempdir(), "mda_result_image.png")
