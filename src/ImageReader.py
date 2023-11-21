@@ -5,6 +5,7 @@ import numpy as np
 import re
 import tempfile
 import os
+import math
 
 from PySide6.QtCore import QObject, Signal, QFile, QThread, QRect, QPoint, QSize, QStandardPaths
 from Database import CardDB
@@ -113,17 +114,9 @@ class TextExtractTask(QThread):
         return txt
 
 
-    def run(self):
-        if not self._template:
-            try:
-                self._template = self._findTemplate(self._source_img)
-            except:
-                print("Template file not found. Cards will not be detected")
-                return
-
-        self._result = []
-        img = cv.cvtColor(self._source_img, cv.COLOR_BGR2GRAY)
-        template = cv.cvtColor(self._template, cv.COLOR_BGR2GRAY)
+    def _findCards(img, template):
+        img = cv.cvtColor(img, cv.COLOR_BGR2GRAY)
+        template = cv.cvtColor(template, cv.COLOR_BGR2GRAY)
 
         # Store width and height of template in w and h
         w, h = template.shape[::-1]
@@ -132,11 +125,37 @@ class TextExtractTask(QThread):
         res = cv.matchTemplate(img, template, cv.TM_CCOEFF_NORMED)
 
         # Specify a threshold
-        threshold = 0.95
+        threshold = 0.94
 
         # Store the coordinates of matched area in a numpy array
         loc = np.where(res >= threshold)
-        loc = list(zip(*loc[::-1]))
+        found = []
+
+        def ignoreClosePoints(pt):
+            # filter points that are close
+            # opencv identify the same mark more than once
+            for p in found:
+                dist = math.hypot(pt[0] - p[0], pt[1] - p[1])
+                if dist < 50:
+                    return False
+            found.append(pt)
+            return True
+
+        result =  filter(lambda pt: ignoreClosePoints(pt), zip(*loc[::-1]))
+        return (img, list(result))
+
+
+    def run(self):
+        self._result = []
+
+        if not self._template:
+            try:
+                self._template = TextExtractTask._findTemplate(self._source_img)
+            except FileNotFoundError:
+                print("Abort")
+                return
+
+        img, loc = TextExtractTask._findCards(self._source_img, self._template)
 
         # keep track of the progress
         p = 0.0
@@ -172,13 +191,17 @@ class TextExtractTask(QThread):
 
 
     # find a template based on image size
-    def _findTemplate(self, img):
+    def _findTemplate(img):
         h, w, _ = img.shape
         template_filename = f"template_{w}_{h}.png"
+        print("Looking for template:", template_filename)
 
         app_dir = os.path.dirname(os.path.realpath(__file__))
         template_filename = os.path.join(app_dir, "icons", template_filename)
         print("Loading template:", template_filename)
+        if not os.path.isfile(template_filename):
+            raise FileNotFoundError()
+
         return cv.imread(template_filename)
 
 
