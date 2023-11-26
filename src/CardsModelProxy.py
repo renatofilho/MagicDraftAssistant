@@ -1,6 +1,9 @@
-from PySide6.QtCore import QSortFilterProxyModel
+from PySide6.QtCore import QSortFilterProxyModel, Qt, Signal
 
 class CardsModelProxy(QSortFilterProxyModel):
+
+    sortChanged = Signal(int, Qt.SortOrder)
+    filterChanged = Signal()
 
     def __init__(self, source_model, parent = None):
         super().__init__(parent)
@@ -14,6 +17,7 @@ class CardsModelProxy(QSortFilterProxyModel):
             return
         self._id_filter = ids
         self.invalidate()
+        self.filterChanged.emit()
 
 
     def applyStringFilter(self, value):
@@ -21,6 +25,7 @@ class CardsModelProxy(QSortFilterProxyModel):
             return
         self._string_filter = value
         self.invalidate()
+        self.filterChanged.emit()
 
 
     def filterAcceptsRow(self, source_row, source_parent):
@@ -36,3 +41,15 @@ class CardsModelProxy(QSortFilterProxyModel):
             return self._string_filter in source_index_name.data()
 
         return True
+
+
+    def sort(self, column, order = Qt.AscendingOrder):
+        super().sort(column, order)
+        self.sortChanged.emit(column, order)
+
+
+    def rowOfCard(self, card_id):
+        for r in range(self.rowCount()):
+            if self.data(self.index(r, 0)) == card_id:
+                return r
+        return None

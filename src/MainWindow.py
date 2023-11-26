@@ -13,6 +13,7 @@ from CardsModel import CardsModel
 from CardsModelProxy import CardsModelProxy
 from CardWidget import CardWidget
 from Database import CardDB, SevenTeenLandsCardDB
+from ImageViewer import ImageViewer
 
 
 class ComboBoxTierEditor(QStyledItemDelegate):
@@ -44,7 +45,6 @@ class MainWindow(QMainWindow):
     def __init__(self, database, parent = None):
         super().__init__(parent)
         self._db = database
-        self._source_image_filename = ""
         self._card_set = None
         self._track_dir = None
         self._show_card_images = False
@@ -56,10 +56,13 @@ class MainWindow(QMainWindow):
         self._img_reader.progress.connect(self._onImageReaderProgressChanged)
         self._img_reader.finished.connect(self._onImageReaderFinished)
 
+
         self._cards_model = CardsModel(database, self)
+        self._cards_model_proxy = CardsModelProxy(self._cards_model, self)
 
         self._setupUi()
         self._loadSettings()
+        self._onResultSortOrderChanged(self._cards_model_proxy.sortColumn())
 
 
     def _setupMenu(self):
@@ -83,10 +86,9 @@ class MainWindow(QMainWindow):
     def _setupUi(self):
         self._setupMenu()
         self._setupToolBar()
-        self._result_image = QLabel(self)
-        self._result_image.setScaledContents(True)
 
         self._tabs = QTabWidget(self)
+        self._result_image = ImageViewer(self)
         self._tabs.addTab(self._result_image, "Source Image")
 
         widget = QWidget(self)
@@ -98,12 +100,12 @@ class MainWindow(QMainWindow):
         self._result_list.setEditTriggers(QAbstractItemView.DoubleClicked)
         self._result_list.setSortingEnabled(True)
 
-        sort_model = CardsModelProxy(self._cards_model, self)
-        self._result_list.setModel(sort_model)
+        self._result_list.setModel(self._cards_model_proxy)
         self._result_list.setColumnHidden(0, True)
         self._result_list.setColumnHidden(2, True)
         self._result_list.setColumnWidth(1, 400)
         self._result_list.setMinimumWidth(600)
+        self._result_list.horizontalHeader().sectionClicked.connect(self._onResultSortOrderChanged)
 
         form_layout = QFormLayout(widget)
 
@@ -124,7 +126,6 @@ class MainWindow(QMainWindow):
 
         self._card_widget = CardWidget(self)
         self._card_widget.setVisible(False)
-
 
         status_bar = self.statusBar()
         self._progress_bar = QProgressBar(self)
@@ -167,6 +168,10 @@ class MainWindow(QMainWindow):
             print("Track dir not set yet")
             return
 
+        if not self._card_set:
+            print("card set not set yet")
+            return
+
         it  = QDirIterator(self._track_dir, QDirIterator.NoIteratorFlags)
         last_modified = None
         recent_file = None
@@ -182,7 +187,7 @@ class MainWindow(QMainWindow):
         if not recent_file:
             return
 
-        self._source_image_filename = recent_file
+        self._result_image.setImage(recent_file)
         self._img_reader.reload(self._card_set, recent_file)
 
 
@@ -214,14 +219,14 @@ class MainWindow(QMainWindow):
         return ret
 
 
-
     def _saveSettings(self):
         settings = QSettings()
         settings.setValue("geometry", self.saveGeometry())
         settings.setValue("windowState", self.saveState())
         settings.setValue("trackDir", self._track_dir)
         settings.setValue("collection", self._card_set)
-        settings.setValue("sortColumn", self._result_list.model().sortColumn())
+        settings.setValue("sortColumn", self._cards_model_proxy.sortColumn())
+        settings.setValue("sortOrder", self._cards_model_proxy.sortOrder())
 
 
     def _loadSettings(self):
@@ -230,6 +235,9 @@ class MainWindow(QMainWindow):
         self.restoreState(settings.value("windowState"))
         self.setTrackDir(settings.value("trackDir", QStandardPaths.standardLocations(QStandardPaths.DownloadLocation)[0]))
         self.setCardSet(settings.value("collection", "woe"))
+        sort_order = settings.value("sortOrder", Qt.DescendingOrder)
+        sort_column = settings.value("sortColumn", CardsModel.COLUMNS.index('seventeen_lands.gp_wr'))
+        self._result_list.sortByColumn(int(sort_column), sort_order)
 
 
     def _donwloadDatabase(self):
@@ -258,13 +266,13 @@ class MainWindow(QMainWindow):
 
     def _updateFilterByImage(self, _state):
         if self._use_image_filter.checkState() == Qt.Checked:
-            self._result_list.model().applyIdFilter(self._img_reader.cardsId())
+            self._cards_model_proxy.applyIdFilter(self._img_reader.cardsId())
         else:
-            self._result_list.model().applyIdFilter(None)
+            self._cards_model_proxy.applyIdFilter(None)
 
 
     def _updateFilterByText(self):
-        self._result_list.model().applyStringFilter(self._search_field.text())
+        self._cards_model_proxy.applyStringFilter(self._search_field.text())
 
 
     def _addCollectionAction(self, tool_bar, act_group, img, name):
@@ -283,10 +291,7 @@ class MainWindow(QMainWindow):
 
 
     def _onImageReaderFinished(self):
-        self._img_reader.writeOutputImage(self._imgResultFilename())
-
-        pic = QPixmap(self._imgResultFilename())
-        self._result_image.setPixmap(pic)
+        self._result_image.setCards(self._img_reader.cards())
         self._updateFilterByImage(self._use_image_filter.checkState())
 
 
@@ -307,7 +312,7 @@ class MainWindow(QMainWindow):
             self._card_widget.hide()
             return
 
-        target_index = self._result_list.model().mapToSource(index)
+        target_index = self._cards_model_proxy.mapToSource(index)
         image_url = self._cards_model.cardImage(target_index)
         if image_url:
             self._card_widget.setUrl(image_url)
@@ -317,3 +322,10 @@ class MainWindow(QMainWindow):
 
     def _imgResultFilename(self):
         return os.path.join(tempfile.gettempdir(), "mda_result_image.png")
+
+
+    def _onResultSortOrderChanged(self, index):
+        if index == -1:
+            return
+
+        self._result_image.setCardsModel(self._cards_model_proxy, index)

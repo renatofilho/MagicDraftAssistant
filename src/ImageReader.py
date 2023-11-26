@@ -40,6 +40,18 @@ class CardArea(object):
         return QRect(self._top_left,  QSize(self.CARD_WIDTH, self.CARD_HEIGHT))
 
 
+    def hasDatabase(self):
+        return not self._card_db is None
+
+
+    def valueFromDatabase(self, field_name):
+        if not self._card_db:
+            return None
+
+        return self._card_db.get(field_name).value()
+
+
+
 # we do OCR on thread since this could block UI
 class TextExtractTask(QThread):
     progress = Signal(float)
@@ -265,36 +277,8 @@ class ImageReader(QObject):
         return row[0]
 
 
-    def writeOutputImage(self, outputFileName):
-        output_image = self._rgb.copy()
-        found = 0
-        not_found = 0
-
-        for data in self._data:
-
-            #draw card rectangle
-            r = data.rect()
-            cv.rectangle(output_image, (r.left(), r.top()),  (r.right(), r.bottom()), (255, 0, 0), 2)
-
-            # draw title rectangle
-            r = data.titleArea()
-            cv.rectangle(output_image, (r.left(), r.top()),  (r.right(), r.bottom()), (0, 255, 0), 2)
-
-            if not data._card_db:
-                not_found = not_found + 1
-                continue
-
-            found = found + 1
-            card_name = data._card_db.get('name').value()
-            print(f"Text: [{card_name}]")
-
-            # draw title
-            cv.putText(output_image, '{}'.format(card_name), (r.left(), r.top()), cv.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
-            found = found + 1
-            
-        print("Total found:", found)
-        print("Total not found:", not_found)
-        cv.imwrite(outputFileName, output_image)
+    def cards(self):
+        return self._data
 
 
     def cardsId(self):
