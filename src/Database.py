@@ -455,7 +455,7 @@ class SevenTeenLandsCardDB(DBTable):
             return None
 
         card_db = CardDB(self._db)
-        with open(filename, newline='') as csvfile:
+        with open(filename, 'r', encoding='utf-8-sig', newline='') as csvfile:
             reader = csv.DictReader(csvfile, delimiter=',', quotechar='"')
             for row in reader:
                 card_name = row["Name"]
