@@ -1,5 +1,5 @@
-import sqlite3
-import os
+""" CardsModel """
+
 import re
 
 from PySide6.QtCore import QAbstractTableModel, Qt, QSize
@@ -9,7 +9,9 @@ from Database import CardDB, SevenTeenLandsCardDB, UserFieldsDB
 from RemoteImage import RemoteImage
 
 class CardData():
-    def __init__(self, model, card, seventeen_lands, user_fields, parent = None):
+    """ Card Information """
+
+    def __init__(self, model, card, seventeen_lands, user_fields):
         self._parent_model = model
         self._card = card
         self._seventeen_lands = seventeen_lands
@@ -19,19 +21,25 @@ class CardData():
 
 
     def value(self, field_name):
+        """
+        return teh value of field_name in database
+        """
         path = field_name.split('.')
         data = self._card
         if path[0] == "user_fields":
             data = self._user_fields
         elif path[0] == "seventeen_lands":
             data = self._seventeen_lands
+
         if data:
             return data[path[1]].value()
-        else:
-            return ""
+        return ""
 
 
     def setValue(self, field_name, value):
+        """
+        set field_name value in database
+        """
         path = field_name.split('.')
         if path[0] != "user_fields":
             print("Table not editable", path[0])
@@ -40,6 +48,9 @@ class CardData():
 
 
     def manaCostImage(self):
+        """
+        Create mana cost image to be used as decorator by the model
+        """
         if self._mana_cost_full_image:
             return self._mana_cost_full_image
 
@@ -50,8 +61,10 @@ class CardData():
                 icon_name = match.group(1)
                 remote_image = RemoteImage(self._parent_model)
                 remote_image.imageReady.connect(self._manaCostRemoteImageReady, Qt.QueuedConnection)
-                remote_image.setUrl("https://svgs.scryfall.io/card-symbols/{}.svg".format(icon_name), QSize(24, 24))
+                remote_image.setUrl(f"https://svgs.scryfall.io/card-symbols/{icon_name}.svg", QSize(24, 24))
                 self._mana_cost_item_images.append(remote_image)
+
+        return None
 
 
     def _manaCostRemoteImageReady(self):
@@ -73,11 +86,18 @@ class CardData():
             x = x + 30
 
         self._mana_cost_item_images = []
-        self._parent_model._notifyDecoratorChanged(self)
+        self._parent_model.notifyDecoratorChanged(self)
+
+
+    def commitUserFields(self, db):
+        """ Save changes on user_fields into the databased """
+        return db.commit(self._user_fields)
 
 
 
 class CardsModel(QAbstractTableModel):
+    """ The main cards model with all tables linked """
+
     COLUMNS  = ["cards.id",
          "cards.name",
          "cards.uri",
@@ -100,7 +120,6 @@ class CardsModel(QAbstractTableModel):
          "seventeen_lands.gns",
          "seventeen_lands.gns_wr",
          "seventeen_lands.iwd"]
-    
 
     EDIABLE_COLUMNS = [
          "user_fields.limited_tier",
@@ -129,6 +148,9 @@ class CardsModel(QAbstractTableModel):
 
 
     def setCardSet(self, set_name):
+        """
+        Set the card set used
+        """
         if self._card_set == set_name:
             return
         self._card_set = set_name
@@ -136,6 +158,9 @@ class CardsModel(QAbstractTableModel):
 
 
     def reload(self):
+        """
+        Reload data from database
+        """
         if not self._card_set:
             return
 
@@ -168,7 +193,7 @@ class CardsModel(QAbstractTableModel):
 
     def flags(self, index):
         if not index.isValid():
-            return Qt.NoItemFlags;
+            return Qt.NoItemFlags
 
         flag = super().flags(index)
         field_name = self.COLUMNS[index.column()]
@@ -213,6 +238,7 @@ class CardsModel(QAbstractTableModel):
 
 
     def cardImage(self, index):
+        """ Returns the url for the card image """
         if not self.hasIndex(index.row(), index.column(), index.parent()):
             return None
 
@@ -229,7 +255,7 @@ class CardsModel(QAbstractTableModel):
             print("Fail to set data", field_name, value)
             return False
 
-        if not self._user_fields_db.commit(data._user_fields):
+        if not data.commitUserFields(self._user_fields_db):
             print("Failed to commit dat", field_name, value)
             return False
 
@@ -239,7 +265,7 @@ class CardsModel(QAbstractTableModel):
     def _loadFromDatabase(self):
         where = None
         if self._card_set:
-            where = "set_ = '{}'".format(self._card_set)
+            where = f"set_ = '{self._card_set}'"
 
         lst = self._cards_db.list(where)
         if not lst:
@@ -247,12 +273,12 @@ class CardsModel(QAbstractTableModel):
 
         for card in lst:
             card_id = card["id"].sqlValue()
-            stl = self._seventee_lands_db.list("card_id = {}".format(card_id))
+            stl = self._seventee_lands_db.list(f"card_id = {card_id}")
             stl_data = None
             if stl and len(stl) == 1:
                 stl_data = stl[0]
 
-            userf = self._user_fields_db.list("card_id = {}".format(card_id))
+            userf = self._user_fields_db.list(f"card_id = {card_id}")
             user_data = None
             if not userf or len(userf) == 0:
                 user_data = self._user_fields_db.addRow()
@@ -263,7 +289,8 @@ class CardsModel(QAbstractTableModel):
             self._data.append(CardData(self, card, stl_data, user_data))
 
 
-    def _notifyDecoratorChanged(self, data):
+    def notifyDecoratorChanged(self, data):
+        """ Used by CardData when the decoration mana image is ready """
         row = self._data.index(data)
         index = self.createIndex(row, self.COLUMNS.index("cards.mana_cost"))
         self.dataChanged.emit(index, index, [Qt.DecorationRole])
