@@ -1,7 +1,9 @@
+""" Main Application Window """
+
 import os
 import tempfile
 
-from PySide6.QtWidgets import QMainWindow, QFileDialog, QStyledItemDelegate, QComboBox, QLabel
+from PySide6.QtWidgets import QMainWindow, QFileDialog, QStyledItemDelegate, QComboBox
 from PySide6.QtWidgets import QTabWidget, QTableView, QAbstractItemView, QWidget, QFormLayout
 from PySide6.QtWidgets import QLineEdit, QCheckBox, QProgressBar
 from PySide6.QtCore import QStandardPaths, QFileSystemWatcher, Qt, QSize
@@ -138,6 +140,7 @@ class MainWindow(QMainWindow):
 
 
     def setTrackDir(self, dirname):
+        """ The dir that will be tracked for new images to parse """
         print("Try set trackDir", dirname)
         if self._track_dir == dirname:
             return
@@ -154,6 +157,7 @@ class MainWindow(QMainWindow):
 
 
     def setCardSet(self, set_name):
+        """ The card set used by the application, this will be used to import data also query for matches """
         if self._card_set == set_name:
             return
 
@@ -164,6 +168,7 @@ class MainWindow(QMainWindow):
 
 
     def refresh(self):
+        """ Reload latest image """
         if not self._track_dir:
             print("Track dir not set yet")
             return

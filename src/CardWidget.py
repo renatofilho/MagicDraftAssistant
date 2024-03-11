@@ -1,15 +1,15 @@
+""" CardWidget.py  """
 import os
-import base64
 
 from PySide6.QtWidgets import QDialog
 from PySide6.QtGui import QImage, QPainter
-from PySide6.QtCore import QUrl, QSize, Qt, QStandardPaths, QFile
-from PySide6.QtNetwork import QNetworkAccessManager, QNetworkRequest
+from PySide6.QtCore import QSize, Qt
 
 from RemoteImage import RemoteImage
 
 
 class CardWidget(QDialog):
+    """ Card Image Popup Dialog """
     def __init__(self, parent = None):
         super().__init__(parent, Qt.Popup | Qt.ToolTip)
         self._remote_image = RemoteImage(self)
@@ -18,10 +18,11 @@ class CardWidget(QDialog):
 
 
     def setUrl(self, url):
+        """ set Image url to be displayed """
         self._remote_image.setUrl(url)
 
 
-    def paintEvent(self, ev):
+    def paintEvent(self, _ev):
         image_to_paint = self._remote_image.image()
         if not image_to_paint:
             image_to_paint = self._default_image

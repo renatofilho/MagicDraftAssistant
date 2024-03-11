@@ -1,3 +1,4 @@
+""" RemoteImage.py """
 import os
 import base64
 
@@ -6,6 +7,7 @@ from PySide6.QtGui import QImage
 from PySide6.QtNetwork import QNetworkAccessManager, QNetworkRequest
 
 class RemoteImage(QObject):
+    """ RemoteImage is a helper class to dowload remote images """
     network_manager = None
 
     imageReady = Signal()
@@ -18,11 +20,13 @@ class RemoteImage(QObject):
         self._url = None
         self._current_request = None
         self._current_image = None
+        self._current_size = None
         self._cache_dir = os.path.join(QStandardPaths.writableLocation(QStandardPaths.AppLocalDataLocation), "cache")
         os.makedirs(self._cache_dir, exist_ok=True)
 
 
     def setUrl(self, url, size = None):
+        """ Set Image url """
         if self._current_request:
             if self._current_request.url() == url:
                 return
@@ -31,7 +35,7 @@ class RemoteImage(QObject):
 
         cache_file = self._imageFromCache(url)
         if QFile.exists(cache_file):
-            self._update_image(QImage(cache_file))
+            self._updateImage(QImage(cache_file))
             return
 
         self._current_image = None
@@ -41,11 +45,13 @@ class RemoteImage(QObject):
         self._current_request.errorOccurred.connect(self._onReplyError)
 
     def image(self):
+        """ Returns QImage or null if not dowloaded yet """
         return self._current_image
 
 
     def isReady(self):
-        return self._current_image != None
+        """ Returns true if image is dowloaded """
+        return self._current_image is not None
 
 
     def _onReplyFinished(self):
@@ -59,10 +65,10 @@ class RemoteImage(QObject):
             img.save(cache_file)
 
         self._current_request = None
-        self._update_image(img)
+        self._updateImage(img)
 
 
-    def _update_image(self, img):
+    def _updateImage(self, img):
         self._current_image = img
         self.imageReady.emit()
 
